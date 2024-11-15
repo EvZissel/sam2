@@ -23,6 +23,8 @@ fi
 # sam2_hiera_b_plus_url="${SAM2_BASE_URL}/sam2_hiera_base_plus.pt"
 # sam2_hiera_l_url="${SAM2_BASE_URL}/sam2_hiera_large.pt"
 
+# example: wget https://dl.fbaipublicfiles.com/segment_anything_2/072824/sam2_hiera_large.pt
+
 # Download each of the four checkpoints using wget
 # echo "Downloading sam2_hiera_tiny.pt checkpoint..."
 # $CMD $sam2_hiera_t_url || { echo "Failed to download checkpoint from $sam2_hiera_t_url"; exit 1; }
