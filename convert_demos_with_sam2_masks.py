@@ -106,10 +106,8 @@ def draw_segmentation(image, masks, object_ids, points=None):
         color = color_by_index(object_id)
         _mask = mask.clone().detach().cpu().numpy().squeeze()
         _mask = _mask > 0
-        # update = 0.6
         mask_all += _mask
 
-    # canvas[_mask, :] = (1.0 - update) * canvas[_mask, :] + update * color
     new_canvas = 255*np.ones_like(source)
     new_canvas[mask_all,:] = canvas[mask_all,:]
     new_canvas = np.clip(new_canvas, 0, 255).astype(np.uint8)
@@ -118,11 +116,40 @@ def draw_segmentation(image, masks, object_ids, points=None):
         points = points.astype(np.int16).squeeze()
         for point, object_id in zip(points, object_ids):
             color = color_by_index(object_id)
-            cv2.circle(canvas, point, radius=3, color=color, thickness=-1)
-            cv2.circle(canvas, point, radius=4, color=(255, 255, 255), thickness=2)
+            cv2.circle(new_canvas, point, radius=3, color=color, thickness=-1)
+            cv2.circle(new_canvas, point, radius=4, color=(255, 255, 255), thickness=2)
 
     return new_canvas
 
+
+def draw_segmentation_color(image, masks, object_ids, points=None):
+    source = image
+    if torch.is_tensor(image):
+        source = np.transpose(image.clone().detach().numpy(), (1, 2, 0))
+        canvas = cv2.cvtColor(source, cv2.COLOR_BGR2RGB)
+    canvas = np.ascontiguousarray(source)
+    if canvas.max() <= 1:
+        canvas = canvas * 255.0
+
+    if object_ids is None:
+        object_ids = torch.arange(1, masks.shape[0] + 1)
+
+    for mask, object_id in zip(masks, object_ids):
+        color = color_by_index(object_id)
+        _mask = mask.clone().detach().cpu().numpy().squeeze()
+        _mask = _mask > 0
+        update = 0.6
+        canvas[_mask, :] = (1.0 - update) * canvas[_mask, :] + update * color
+        canvas = np.clip(canvas, 0, 255).astype(np.uint8)
+
+    if points is not None:
+        points = points.astype(np.int16).squeeze()
+        for point, object_id in zip(points, object_ids):
+            color = color_by_index(object_id)
+            cv2.circle(canvas, point, radius=3, color=color, thickness=-1)
+            cv2.circle(canvas, point, radius=4, color=(255, 255, 255), thickness=2)
+
+    return canvas
 
 def show_image(image):
     plt.figure(1, figsize=(20, 20))
@@ -158,7 +185,7 @@ def main():
     predictor = sam2_predictor()
 
     # emulate gym environment
-    file_name = ('peg_insert_20_demos_20_trials_pose_id_10_2024-11-11_12-18-33')
+    file_name = ('peg_insert_20_demos_20_trials_pose_id_10_2024-11-25_12-23-39')
     env = gym_make(file_name)
 
     # emulate SERL SAC agent
@@ -175,9 +202,9 @@ def main():
 
     points = np.array([
         np.array([[68, 65]], dtype=np.float32),  # peg 1
-        np.array([[69, 87]], dtype=np.float32),  # hole 1
+        np.array([[65, 80]], dtype=np.float32),  # hole 1
         np.array([[70, 190]], dtype=np.float32),  # peg 2
-        np.array([[64, 211]], dtype=np.float32)  # hole 2
+        np.array([[67, 210]], dtype=np.float32)  # hole 2
     ])
     label = np.array([1], dtype=np.int32)  # value of 1 marks foreground point
 
@@ -203,6 +230,10 @@ def main():
 
     # overlay masks on the frame captured from the cameras
     next_obs = draw_segmentation(frame, masks, object_ids, points)
+    # next_obs = draw_segmentation_color(frame, masks, object_ids, points)
+    show_image(next_obs)
+    next_obs = draw_segmentation(frame, masks, object_ids)
+    # next_obs = draw_segmentation_color(frame, masks, object_ids)
     observations = [next_obs]
     show_image(next_obs)
     env.insert_obs(next_obs)
@@ -231,6 +262,7 @@ def main():
                 # overlay mask segments
                 time_overlay = time.time()
                 next_obs = draw_segmentation(frame, masks, object_ids)
+                # next_obs = draw_segmentation_color(frame, masks, object_ids)
                 delay_overlay.append(time.time() - time_overlay)
                 # show_image(next_obs)
 
