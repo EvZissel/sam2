@@ -2,6 +2,8 @@ import torch
 import cv2
 import numpy as np
 import pickle as pkl
+from scipy import signal
+from examples import config_mask
 
 class Environment():
     def __init__(self, demo):
@@ -14,12 +16,14 @@ class Environment():
         print('debug')
 
     def reset(self):
-        # obs, _reward, _done, _truncated, _info = self.step(0)
         obs_1 = self.demo[self.steps]['observations']['wrist_1']
         obs_2 = self.demo[self.steps]['observations']['wrist_2']
         obs = np.squeeze(np.concatenate((obs_1, obs_2), axis=1))
+        next_obs_1 = self.demo[self.steps]['next_observations']['wrist_1']
+        next_obs_2 = self.demo[self.steps]['next_observations']['wrist_2']
+        next_obs = np.squeeze(np.concatenate((next_obs_1, next_obs_2), axis=1))
         self.steps += 1
-        return obs
+        return obs, next_obs
 
     def step(self):
         # # ret is True if the frame is available
@@ -39,20 +43,23 @@ class Environment():
         obs_1 = self.demo[self.steps]['observations']['wrist_1']
         obs_2 = self.demo[self.steps]['observations']['wrist_2']
         obs = np.squeeze(np.concatenate((obs_1, obs_2), axis=1))
-
+        next_obs_1 = self.demo[self.steps]['next_observations']['wrist_1']
+        next_obs_2 = self.demo[self.steps]['next_observations']['wrist_2']
+        next_obs = np.squeeze(np.concatenate((next_obs_1, next_obs_2), axis=1))
         done = self.demo[self.steps]['dones']
         self.steps += 1
 
-        return obs, 0., done, False, {}
+        return obs, next_obs, 0., done, False, {}
 
     def release(self):
         self.env.release()
 
-    def insert_obs(self, obs):
+    def insert_obs(self, obs, next_obs):
 
         self.transitions[self.steps -1]['observations']['wrist_1'][0] = obs[:128,:,:]
         self.transitions[self.steps -1]['observations']['wrist_2'][0] = obs[128:,:,:]
-
+        self.transitions[self.steps -1]['next_observations']['wrist_1'][0] = next_obs[:128,:,:]
+        self.transitions[self.steps -1]['next_observations']['wrist_2'][0] = next_obs[128:,:,:]
 
 
 class Agent():
@@ -89,7 +96,7 @@ def color_by_index(index):
     return np.array(color) * 255.
 
 
-def draw_segmentation(image, masks, object_ids, points=None):
+def draw_segmentation(image, masks, object_ids, points=None, kernel_size=9):
     source = image
     if torch.is_tensor(image):
         source = np.transpose(image.clone().detach().numpy(), (1, 2, 0))
@@ -106,6 +113,10 @@ def draw_segmentation(image, masks, object_ids, points=None):
         color = color_by_index(object_id)
         _mask = mask.clone().detach().cpu().numpy().squeeze()
         _mask = _mask > 0
+        if object_id % 2 == 0 :
+            kernel = np.ones((kernel_size,kernel_size))
+            _mask = signal.convolve2d(_mask, kernel, boundary='symm', mode='same')
+            _mask = _mask > 0
         mask_all += _mask
 
     new_canvas = 255*np.ones_like(source)
@@ -122,7 +133,7 @@ def draw_segmentation(image, masks, object_ids, points=None):
     return new_canvas
 
 
-def draw_segmentation_color(image, masks, object_ids, points=None):
+def draw_segmentation_color(image, masks, object_ids, points=None, kernel_size=9):
     source = image
     if torch.is_tensor(image):
         source = np.transpose(image.clone().detach().numpy(), (1, 2, 0))
@@ -138,6 +149,10 @@ def draw_segmentation_color(image, masks, object_ids, points=None):
         color = color_by_index(object_id)
         _mask = mask.clone().detach().cpu().numpy().squeeze()
         _mask = _mask > 0
+        if object_id % 2 == 0 :
+            kernel = np.ones((kernel_size,kernel_size))
+            _mask = signal.convolve2d(_mask, kernel, boundary='symm', mode='same')
+            _mask = _mask > 0
         update = 0.6
         canvas[_mask, :] = (1.0 - update) * canvas[_mask, :] + update * color
         canvas = np.clip(canvas, 0, 255).astype(np.uint8)
@@ -182,61 +197,112 @@ import time
 
 
 def main():
-    predictor = sam2_predictor()
+    predictor_obs = sam2_predictor()
+    predictor_following_obs = sam2_predictor()
 
+    kernel_size = 9
     # emulate gym environment
-    file_name = ('peg_insert_20_demos_20_trials_pose_id_10_2024-11-25_12-23-39')
+    pose_id = 13
+    file_name = ('peg_insert_20_demos_20_trials_pose_id_2_2024-11-25_15-03-58')
     env = gym_make(file_name)
 
     # emulate SERL SAC agent
     # agent = Agent()
 
     # reset environment and acquire frames from camera
-    obs = env.reset()
+    obs, following_obs = env.reset()
     # frame = obs["images"]  # assuming images are stacked vertically
     frame = obs
+    following_frame = following_obs
 
     # add new prompts and instantly get the output on the same frame
-    predictor.load_first_frame(frame)
+    predictor_obs.load_first_frame(frame)
+    predictor_following_obs.load_first_frame(following_frame)
     show_image(frame)
+    show_image(following_frame)
 
     points = np.array([
         np.array([[68, 65]], dtype=np.float32),  # peg 1
-        np.array([[65, 80]], dtype=np.float32),  # hole 1
+        np.array([[69, 89]], dtype=np.float32),  # hole 1
         np.array([[70, 190]], dtype=np.float32),  # peg 2
-        np.array([[67, 210]], dtype=np.float32)  # hole 2
+        np.array([[65, 213]], dtype=np.float32)  # hole 2
     ])
+    # points = config_mask.POINTS_ARRAY[pose_id]
     label = np.array([1], dtype=np.int32)  # value of 1 marks foreground point
 
+    # observation
     # track first object
-    frame_idx, object_ids, masks = predictor.add_new_points(
+    frame_idx, object_ids, masks = predictor_obs.add_new_points(
         frame_idx=0, obj_id=1, points=points[0], labels=label
     )
 
     # track second object - this call returns all masks and all object ids
-    frame_idx, object_ids, masks = predictor.add_new_points(
+    frame_idx, object_ids, masks = predictor_obs.add_new_points(
         frame_idx=0, obj_id=2, points=points[1], labels=label
     )
 
     # track third object - this call returns all masks and all object ids
-    frame_idx, object_ids, masks = predictor.add_new_points(
+    frame_idx, object_ids, masks = predictor_obs.add_new_points(
         frame_idx=0, obj_id=3, points=points[2], labels=label
     )
 
     # track fourth object - this call returns all masks and all object ids
-    frame_idx, object_ids, masks = predictor.add_new_points(
+    frame_idx, object_ids, masks = predictor_obs.add_new_points(
+        frame_idx=0, obj_id=4, points=points[3], labels=label
+    )
+
+    # next observation
+    # track first object
+    following_frame_idx, following_object_ids, following_masks = predictor_following_obs.add_new_points(
+        frame_idx=0, obj_id=1, points=points[0], labels=label
+    )
+
+    # track second object - this call returns all masks and all object ids
+    following_frame_idx, following_object_ids, following_masks = predictor_following_obs.add_new_points(
+        frame_idx=0, obj_id=2, points=points[1], labels=label
+    )
+
+    # track third object - this call returns all masks and all object ids
+    following_frame_idx, following_object_ids, following_masks = predictor_following_obs.add_new_points(
+        frame_idx=0, obj_id=3, points=points[2], labels=label
+    )
+
+    # track fourth object - this call returns all masks and all object ids
+    following_frame_idx, following_object_ids, following_masks = predictor_following_obs.add_new_points(
         frame_idx=0, obj_id=4, points=points[3], labels=label
     )
 
     # overlay masks on the frame captured from the cameras
-    next_obs = draw_segmentation(frame, masks, object_ids, points)
-    # next_obs = draw_segmentation_color(frame, masks, object_ids, points)
-    show_image(next_obs)
-    next_obs = draw_segmentation(frame, masks, object_ids)
-    # next_obs = draw_segmentation_color(frame, masks, object_ids)
+    frame_ = np.copy(frame)
+    next_obs_ = draw_segmentation_color(frame_, masks, object_ids, points, kernel_size=kernel_size)
+    show_image(next_obs_)
+    next_obs = draw_segmentation(frame, masks, object_ids, kernel_size=kernel_size)
     observations = [next_obs]
     show_image(next_obs)
-    env.insert_obs(next_obs)
+
+    following_frame_ = np.copy(following_frame)
+    following_next_obs_ = draw_segmentation_color(following_frame_, following_masks, following_object_ids, points, kernel_size=kernel_size)
+    show_image(following_next_obs_)
+    following_next_obs = draw_segmentation(following_frame, following_masks, following_object_ids, kernel_size=kernel_size)
+    following_observations = [following_next_obs]
+    show_image(following_next_obs)
+
+    env.insert_obs(next_obs, following_next_obs)
+
+    # fix mask discontinuity
+    print(f'hole 1 sum: {(masks[1] > 0).sum()}')
+    print(f'hole 2 sum: {(masks[3] > 0).sum()}')
+    hole1_mask_sum = (masks[1] > 0).sum()
+    hole2_mask_sum = (masks[3] > 0).sum()
+    first_hole1_sum = hole1_mask_sum
+    first_hole2_sum = hole2_mask_sum
+
+    print(f'following hole 1 sum: {(following_masks[1] > 0).sum()}')
+    print(f'following hole 2 sum: {(following_masks[3] > 0).sum()}')
+    following_hole1_mask_sum = (following_masks[1] > 0).sum()
+    following_hole2_mask_sum = (following_masks[3] > 0).sum()
+    first_following_hole1_sum = following_hole1_mask_sum
+    first_following_hole2_sum = following_hole2_mask_sum
 
     # measure delay
     delay_tracking = []
@@ -248,27 +314,72 @@ def main():
                 print(f"step {len(observations)}")
                 # take action and observe next state
                 # action = agent.sample_actions(observations=next_obs)
-                obs, _reward, done, _truncated, _info = env.step()
+                obs, following_obs, _reward, done, _truncated, _info = env.step()
                 if done:
                     transition_no += 1
+                    frame = obs
+                    object_ids, masks = predictor_obs.track(frame)
+                    hole1_mask_sum = (masks[1] > 0).sum()
+                    hole2_mask_sum = (masks[3] > 0).sum()
+                    next_obs = draw_segmentation(frame, masks, object_ids, kernel_size=kernel_size)
+                    observations.append(next_obs)
+
+                    following_frame = following_obs
+                    following_object_ids, following_masks = predictor_following_obs.track(frame)
+                    following_hole1_mask_sum = (following_masks[1] > 0).sum()
+                    following_hole2_mask_sum = (following_masks[3] > 0).sum()
+                    following_next_obs = draw_segmentation(following_frame, following_masks, following_object_ids, kernel_size=kernel_size)
+                    following_observations.append(following_next_obs)
+
+                    env.insert_obs(next_obs, following_next_obs)
                     break
 
                 # run inference using masks as input
                 time_track = time.time()
                 frame = obs
-                object_ids, masks = predictor.track(frame)
+                object_ids, masks = predictor_obs.track(frame)
+                next_hole1_mask_sum = (masks[1] > 0).sum()
+                next_hole2_mask_sum = (masks[3] > 0).sum()
+                print(f'hole 1 sum: {next_hole1_mask_sum}')
+                print(f'hole 2 sum: {next_hole2_mask_sum}')
+                # we assume continues transitions in episode
+                if next_hole1_mask_sum - hole1_mask_sum > 0.9*first_hole1_sum and 0.1*first_hole1_sum > hole1_mask_sum:
+                    masks[1] += -masks[1].max() - 1
+                    next_hole1_mask_sum = (masks[1] > 0).sum()
+                if next_hole2_mask_sum - hole2_mask_sum > 0.9*first_hole2_sum and 0.1*first_hole2_sum > hole2_mask_sum:
+                    masks[3] += -masks[3].max() - 1
+                    next_hole2_mask_sum = (masks[3] > 0).sum()
+                hole1_mask_sum = next_hole1_mask_sum
+                hole2_mask_sum = next_hole2_mask_sum
+
+                following_frame = following_obs
+                following_object_ids, following_masks = predictor_following_obs.track(following_frame)
+                following_next_hole1_mask_sum = (following_masks[1] > 0).sum()
+                following_next_hole2_mask_sum = (following_masks[3] > 0).sum()
+                print(f'hole 1 sum: {following_next_hole1_mask_sum}')
+                print(f'hole 2 sum: {following_next_hole2_mask_sum}')
+                # we assume continues transitions in episode
+                if following_next_hole1_mask_sum - following_hole1_mask_sum > 0.9*first_following_hole1_sum and 0.1*first_following_hole1_sum > following_hole1_mask_sum:
+                    following_masks[1] += -following_masks[1].max() - 1
+                    following_next_hole1_mask_sum = (following_masks[1] > 0).sum()
+                if following_next_hole2_mask_sum - following_hole2_mask_sum > 0.9*first_following_hole2_sum and 0.8*first_following_hole2_sum > following_hole2_mask_sum:
+                    following_masks[3] += -following_masks[3].max() - 1
+                    following_next_hole2_mask_sum = (following_masks[3] > 0).sum()
+                following_hole1_mask_sum = following_next_hole1_mask_sum
+                following_hole2_mask_sum = following_next_hole2_mask_sum
                 delay_tracking.append(time.time() - time_track)
 
                 # overlay mask segments
                 time_overlay = time.time()
-                next_obs = draw_segmentation(frame, masks, object_ids)
-                # next_obs = draw_segmentation_color(frame, masks, object_ids)
+                next_obs = draw_segmentation(frame, masks, object_ids, kernel_size=kernel_size)
+                following_next_obs = draw_segmentation(following_frame, following_masks, following_object_ids, kernel_size=kernel_size)
                 delay_overlay.append(time.time() - time_overlay)
                 # show_image(next_obs)
 
                 # collect observations
                 observations.append(next_obs)
-                env.insert_obs(next_obs)
+                following_observations.append(following_next_obs)
+                env.insert_obs(next_obs, following_next_obs)
 
         # env.release()  # release camera - only needed when loading from a video file
 
@@ -279,8 +390,9 @@ def main():
               f"overlay delay (avg) {delay_overlay_.mean():.2f}ms")
 
 
-    save_observations(observations, name=f"./transitions/{file_name}_masked.mp4")
-    file_path = f'/home/ev/serl/examples/async_peg_insert_drq/{file_name}_masked.pkl'
+    save_observations(observations, name=f"./transitions/{file_name}_masked_k{kernel_size}_obs_test.mp4")
+    save_observations(following_observations, name=f"./transitions/{file_name}_masked_k{kernel_size}_next_obs_test.mp4")
+    file_path = f'/home/ev/serl/examples/async_peg_insert_drq/{file_name}_masked_k{kernel_size}.pkl'
     with open(file_path, "wb") as f:
         pkl.dump(env.transitions, f)
 
