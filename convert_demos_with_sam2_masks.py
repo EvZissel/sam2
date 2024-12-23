@@ -3,7 +3,6 @@ import cv2
 import numpy as np
 import pickle as pkl
 from scipy import signal
-from examples import config_mask
 
 class Environment():
     def __init__(self, demo):
@@ -158,8 +157,9 @@ def draw_segmentation_color(image, masks, object_ids, points=None, kernel_size=9
         canvas = np.clip(canvas, 0, 255).astype(np.uint8)
 
     if points is not None:
-        points = points.astype(np.int16).squeeze()
+        # points = points.astype(np.int16).squeeze()
         for point, object_id in zip(points, object_ids):
+            point = point[0].astype(np.int16)
             color = color_by_index(object_id)
             cv2.circle(canvas, point, radius=3, color=color, thickness=-1)
             cv2.circle(canvas, point, radius=4, color=(255, 255, 255), thickness=2)
@@ -202,8 +202,8 @@ def main():
 
     kernel_size = 9
     # emulate gym environment
-    pose_id = 13
-    file_name = ('peg_insert_20_demos_20_trials_pose_id_2_2024-11-25_15-03-58')
+    pose_id = 1
+    file_name = ('peg_insert_1_demos_1_trials_pose_id_19_2024-12-16_10-53-19')
     env = gym_make(file_name)
 
     # emulate SERL SAC agent
@@ -221,55 +221,68 @@ def main():
     show_image(frame)
     show_image(following_frame)
 
-    points = np.array([
+    points = [
         np.array([[68, 65]], dtype=np.float32),  # peg 1
-        np.array([[69, 89]], dtype=np.float32),  # hole 1
+        np.array([[84, 86],[48,109]], dtype=np.float32),  # hole 1
         np.array([[70, 190]], dtype=np.float32),  # peg 2
-        np.array([[65, 213]], dtype=np.float32)  # hole 2
-    ])
+        np.array([[48, 209],[95,219]], dtype=np.float32),  # hole 2
+    ]
+
     # points = config_mask.POINTS_ARRAY[pose_id]
-    label = np.array([1], dtype=np.int32)  # value of 1 marks foreground point
+    label = [
+        np.array([1], dtype=np.int32),
+        np.array([1,0], dtype=np.int32),
+        np.array([1], dtype=np.int32),
+        np.array([1,0], dtype=np.int32),
+    ]
+
+    # points_2nd_hole = np.array([
+    #     np.array([[54, 219],[90, 216]], dtype=np.float32),  # hole 2 and negative point for hole 2
+    # ])  # hole 2 and negative point for hole 2
+    # labels_2nd_hole = np.array([1, 0], dtype=np.int32)
 
     # observation
     # track first object
     frame_idx, object_ids, masks = predictor_obs.add_new_points(
-        frame_idx=0, obj_id=1, points=points[0], labels=label
+        frame_idx=0, obj_id=1, points=points[0], labels=label[0]
     )
 
     # track second object - this call returns all masks and all object ids
     frame_idx, object_ids, masks = predictor_obs.add_new_points(
-        frame_idx=0, obj_id=2, points=points[1], labels=label
+        frame_idx=0, obj_id=2, points=points[1], labels=label[1]
     )
 
     # track third object - this call returns all masks and all object ids
     frame_idx, object_ids, masks = predictor_obs.add_new_points(
-        frame_idx=0, obj_id=3, points=points[2], labels=label
+        frame_idx=0, obj_id=3, points=points[2], labels=label[2]
     )
 
     # track fourth object - this call returns all masks and all object ids
     frame_idx, object_ids, masks = predictor_obs.add_new_points(
-        frame_idx=0, obj_id=4, points=points[3], labels=label
+        # frame_idx=0, obj_id=4, points=points[3], labels=label_and_negative
+        frame_idx=0, obj_id=4, points=points[3], labels=label[3]
     )
 
     # next observation
     # track first object
     following_frame_idx, following_object_ids, following_masks = predictor_following_obs.add_new_points(
-        frame_idx=0, obj_id=1, points=points[0], labels=label
+        frame_idx=0, obj_id=1, points=points[0], labels=label[0]
     )
 
     # track second object - this call returns all masks and all object ids
     following_frame_idx, following_object_ids, following_masks = predictor_following_obs.add_new_points(
-        frame_idx=0, obj_id=2, points=points[1], labels=label
+        frame_idx=0, obj_id=2, points=points[1], labels=label[1]
     )
 
     # track third object - this call returns all masks and all object ids
     following_frame_idx, following_object_ids, following_masks = predictor_following_obs.add_new_points(
-        frame_idx=0, obj_id=3, points=points[2], labels=label
+        frame_idx=0, obj_id=3, points=points[2], labels=label[2]
     )
 
     # track fourth object - this call returns all masks and all object ids
     following_frame_idx, following_object_ids, following_masks = predictor_following_obs.add_new_points(
-        frame_idx=0, obj_id=4, points=points[3], labels=label
+        # frame_idx=0, obj_id=4, points=points[3], labels=label_and_negative
+        frame_idx=0, obj_id=4, points=points[3], labels=label[3]
     )
 
     # overlay masks on the frame captured from the cameras
