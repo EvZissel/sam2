@@ -38,7 +38,7 @@ def main():
 
     # upload damos
     for file in os.listdir("/home/ev/serl/examples/async_peg_insert_drq"):
-        file_start = 'peg_insert_20_demos_20_trials_pose_id_2'
+        file_start = 'peg_insert_5_demos_5_trials_mixed_pose_id_2024-12-26_12-04-58'
         if file.startswith(file_start) and not (file.endswith('_masked_k9.pkl') or file.endswith('_masked_color.pkl')):
 
             demo_path = f'/home/ev/serl/examples/async_peg_insert_drq/{file}'
@@ -71,7 +71,9 @@ def main():
                     observations.append(obs)
 
 
-            save_observations(observations, name=f"./transitions/{file[:-4]}_next_observations.mp4")
+            # save_observations(observations, name=f"./transitions/{file[:-4]}_next_observations.mp4")
+            save_observations(observations, name=f"./transitions/{file}_next_observations.mp4")
+
 
 if __name__ == "__main__":
     import os; print(os.getcwd())

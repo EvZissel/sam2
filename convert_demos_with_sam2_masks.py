@@ -203,7 +203,7 @@ def main():
     kernel_size = 9
     # emulate gym environment
     pose_id = 1
-    file_name = ('peg_insert_1_demos_1_trials_pose_id_19_2024-12-16_10-53-19')
+    file_name = ('peg_insert_1_demos_1_trials_pose_id_6_2024-12-16_10-46-33')
     env = gym_make(file_name)
 
     # emulate SERL SAC agent
@@ -223,9 +223,9 @@ def main():
 
     points = [
         np.array([[68, 65]], dtype=np.float32),  # peg 1
-        np.array([[84, 86],[48,109]], dtype=np.float32),  # hole 1
-        np.array([[70, 190]], dtype=np.float32),  # peg 2
-        np.array([[48, 209],[95,219]], dtype=np.float32),  # hole 2
+        np.array([[69, 84],[111, 107]], dtype=np.float32),  # hole 1
+        np.array([[70, 190]], dtype=np.float32), # peg 2
+        np.array([[62, 209]], dtype=np.float32), # hole 2
     ]
 
     # points = config_mask.POINTS_ARRAY[pose_id]
@@ -233,7 +233,7 @@ def main():
         np.array([1], dtype=np.int32),
         np.array([1,0], dtype=np.int32),
         np.array([1], dtype=np.int32),
-        np.array([1,0], dtype=np.int32),
+        np.array([1], dtype=np.int32),
     ]
 
     # points_2nd_hole = np.array([
