@@ -203,7 +203,7 @@ def main():
     kernel_size = 9
     # emulate gym environment
     pose_id = 1
-    file_name = ('peg_insert_1_demos_1_trials_pose_id_6_2024-12-16_10-46-33')
+    file_name = ('mix_clean/peg_insert_2_demos_2_trials_mixed_pose_id_2024-12-29_11-25-18_1of2_0of4_0of17_1of11_497clean')
     env = gym_make(file_name)
 
     # emulate SERL SAC agent
