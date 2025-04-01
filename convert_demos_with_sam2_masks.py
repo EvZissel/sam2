@@ -200,10 +200,10 @@ def main():
     predictor_obs = sam2_predictor()
     predictor_following_obs = sam2_predictor()
 
-    kernel_size = 9
+    kernel_size = 16
     # emulate gym environment
     pose_id = 1
-    file_name = ('peg_insert_1_demos_1_trials_pose_id_13_2024-12-16_10-49-40')
+    file_name = ('peg_insert_1_demos_1_trials_pose_id_1_2025-03-31_12-13-17_round')
     env = gym_make(file_name)
 
     # emulate SERL SAC agent
@@ -222,18 +222,18 @@ def main():
     show_image(following_frame)
 
     points = [
-        np.array([[68, 65]], dtype=np.float32),  # peg 1
-        np.array([[68, 81]], dtype=np.float32),  # hole 1
-        np.array([[70, 190]], dtype=np.float32), # peg 2
-        np.array([[66, 214],[80, 213]], dtype=np.float32),  # hole 2
+        np.array([[68, 65],[50,84]], dtype=np.float32),  # peg 1
+        np.array([[66, 91],[56,134]], dtype=np.float32),  # hole 1
+        np.array([[70, 190],[45,122]], dtype=np.float32), # peg 2
+        np.array([[63, 217]], dtype=np.float32),  # hole 2
     ]
 
     # points = config_mask.POINTS_ARRAY[pose_id]
     label = [
+        np.array([1, 0], dtype=np.int32),
+        np.array([1, 0], dtype=np.int32),
+        np.array([1, 0], dtype=np.int32),
         np.array([1], dtype=np.int32),
-        np.array([1], dtype=np.int32),
-        np.array([1], dtype=np.int32),
-        np.array([1,0], dtype=np.int32),
     ]
 
     # points_2nd_hole = np.array([
@@ -405,7 +405,7 @@ def main():
 
     save_observations(observations, name=f"./transitions/{file_name}_masked_k{kernel_size}_obs_test.mp4")
     save_observations(following_observations, name=f"./transitions/{file_name}_masked_k{kernel_size}_next_obs_test.mp4")
-    file_path = f'/home/ev/serl/examples/async_peg_insert_drq/{file_name}_masked_k{kernel_size}.pkl'
+    file_path = f'/home/ev/serl/examples/async_peg_insert_drq/{file_name}_masked_k{kernel_size}_test.pkl'
     with open(file_path, "wb") as f:
         pkl.dump(env.transitions, f)
 
