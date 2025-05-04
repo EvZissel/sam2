@@ -112,10 +112,10 @@ def draw_segmentation(image, masks, object_ids, points=None, kernel_size=9):
         color = color_by_index(object_id)
         _mask = mask.clone().detach().cpu().numpy().squeeze()
         _mask = _mask > 0
-        if object_id % 2 == 0 :
-            kernel = np.ones((kernel_size,kernel_size))
-            _mask = signal.convolve2d(_mask, kernel, boundary='symm', mode='same')
-            _mask = _mask > 0
+        # if object_id % 2 == 0 :
+        kernel = np.ones((kernel_size,kernel_size))
+        _mask = signal.convolve2d(_mask, kernel, boundary='symm', mode='same')
+        _mask = _mask > 0
         mask_all += _mask
 
     new_canvas = 255*np.ones_like(source)
@@ -148,10 +148,10 @@ def draw_segmentation_color(image, masks, object_ids, points=None, kernel_size=9
         color = color_by_index(object_id)
         _mask = mask.clone().detach().cpu().numpy().squeeze()
         _mask = _mask > 0
-        if object_id % 2 == 0 :
-            kernel = np.ones((kernel_size,kernel_size))
-            _mask = signal.convolve2d(_mask, kernel, boundary='symm', mode='same')
-            _mask = _mask > 0
+        # if object_id % 2 == 0 :
+        kernel = np.ones((kernel_size,kernel_size))
+        _mask = signal.convolve2d(_mask, kernel, boundary='symm', mode='same')
+        _mask = _mask > 0
         update = 0.6
         canvas[_mask, :] = (1.0 - update) * canvas[_mask, :] + update * color
         canvas = np.clip(canvas, 0, 255).astype(np.uint8)
@@ -167,7 +167,7 @@ def draw_segmentation_color(image, masks, object_ids, points=None, kernel_size=9
     return canvas
 
 def show_image(image):
-    plt.figure(1, figsize=(20, 20))
+    plt.figure(1, figsize=(14, 14))
     plt.axis('off')
     plt.imshow(image)
     plt.waitforbuttonpress()
@@ -200,10 +200,10 @@ def main():
     predictor_obs = sam2_predictor()
     predictor_following_obs = sam2_predictor()
 
-    kernel_size = 16
+    kernel_size = 1
     # emulate gym environment
     pose_id = 1
-    file_name = ('peg_insert_1_demos_1_trials_pose_id_1_2025-03-31_12-13-17_round')
+    file_name = ('peg_insert_1_demos_1_trials_hex_2025-04-24_12-26-10')
     env = gym_make(file_name)
 
     # emulate SERL SAC agent
@@ -221,19 +221,27 @@ def main():
     show_image(frame)
     show_image(following_frame)
 
+    # points = [
+    #     np.array([[68, 65]], dtype=np.float32),  # peg 1
+    #     np.array([[67, 90],[68,95]], dtype=np.float32),  # hole 1
+    #     np.array([[70, 190]], dtype=np.float32), # peg 2
+    #     np.array([[63, 217],[66,222]], dtype=np.float32),  # hole 2
+    # ]
     points = [
-        np.array([[68, 65],[50,84]], dtype=np.float32),  # peg 1
-        np.array([[66, 91],[56,134]], dtype=np.float32),  # hole 1
-        np.array([[70, 190],[45,122]], dtype=np.float32), # peg 2
-        np.array([[63, 217]], dtype=np.float32),  # hole 2
+        np.array([[67, 90],[76,95],[67, 104]], dtype=np.float32),  # hole 1
+        np.array([[63, 217],[73,224],[65, 223],[66, 232],[66,224],[64,223],[65,223],[66,223],[57,210]], dtype=np.float32),  # hole 2
     ]
 
     # points = config_mask.POINTS_ARRAY[pose_id]
+    # label = [
+    #     np.array([1,], dtype=np.int32),
+    #     np.array([1, 1], dtype=np.int32),
+    #     np.array([1,], dtype=np.int32),
+    #     np.array([1, 1], dtype=np.int32),
+    # ]
     label = [
-        np.array([1, 0], dtype=np.int32),
-        np.array([1, 0], dtype=np.int32),
-        np.array([1, 0], dtype=np.int32),
-        np.array([1], dtype=np.int32),
+        np.array([1, 1, 0], dtype=np.int32),
+        np.array([1, 1, 0, 0, 1, 1, 1, 1, 1], dtype=np.int32),
     ]
 
     # points_2nd_hole = np.array([
@@ -252,16 +260,16 @@ def main():
         frame_idx=0, obj_id=2, points=points[1], labels=label[1]
     )
 
-    # track third object - this call returns all masks and all object ids
-    frame_idx, object_ids, masks = predictor_obs.add_new_points(
-        frame_idx=0, obj_id=3, points=points[2], labels=label[2]
-    )
-
-    # track fourth object - this call returns all masks and all object ids
-    frame_idx, object_ids, masks = predictor_obs.add_new_points(
-        # frame_idx=0, obj_id=4, points=points[3], labels=label_and_negative
-        frame_idx=0, obj_id=4, points=points[3], labels=label[3]
-    )
+    # # track third object - this call returns all masks and all object ids
+    # frame_idx, object_ids, masks = predictor_obs.add_new_points(
+    #     frame_idx=0, obj_id=3, points=points[2], labels=label[2]
+    # )
+    #
+    # # track fourth object - this call returns all masks and all object ids
+    # frame_idx, object_ids, masks = predictor_obs.add_new_points(
+    #     # frame_idx=0, obj_id=4, points=points[3], labels=label_and_negative
+    #     frame_idx=0, obj_id=4, points=points[3], labels=label[3]
+    # )
 
     # next observation
     # track first object
@@ -274,21 +282,23 @@ def main():
         frame_idx=0, obj_id=2, points=points[1], labels=label[1]
     )
 
-    # track third object - this call returns all masks and all object ids
-    following_frame_idx, following_object_ids, following_masks = predictor_following_obs.add_new_points(
-        frame_idx=0, obj_id=3, points=points[2], labels=label[2]
-    )
-
-    # track fourth object - this call returns all masks and all object ids
-    following_frame_idx, following_object_ids, following_masks = predictor_following_obs.add_new_points(
-        # frame_idx=0, obj_id=4, points=points[3], labels=label_and_negative
-        frame_idx=0, obj_id=4, points=points[3], labels=label[3]
-    )
+    # # track third object - this call returns all masks and all object ids
+    # following_frame_idx, following_object_ids, following_masks = predictor_following_obs.add_new_points(
+    #     frame_idx=0, obj_id=3, points=points[2], labels=label[2]
+    # )
+    #
+    # # track fourth object - this call returns all masks and all object ids
+    # following_frame_idx, following_object_ids, following_masks = predictor_following_obs.add_new_points(
+    #     # frame_idx=0, obj_id=4, points=points[3], labels=label_and_negative
+    #     frame_idx=0, obj_id=4, points=points[3], labels=label[3]
+    # )
 
     # overlay masks on the frame captured from the cameras
     frame_ = np.copy(frame)
     next_obs_ = draw_segmentation_color(frame_, masks, object_ids, points, kernel_size=kernel_size)
     show_image(next_obs_)
+    # next_obs_ = draw_segmentation_color(frame_, masks, object_ids, kernel_size=kernel_size)
+    # show_image(next_obs_)
     next_obs = draw_segmentation(frame, masks, object_ids, kernel_size=kernel_size)
     observations = [next_obs]
     show_image(next_obs)
@@ -296,6 +306,8 @@ def main():
     following_frame_ = np.copy(following_frame)
     following_next_obs_ = draw_segmentation_color(following_frame_, following_masks, following_object_ids, points, kernel_size=kernel_size)
     show_image(following_next_obs_)
+    # following_next_obs_ = draw_segmentation_color(following_frame_, following_masks, following_object_ids, kernel_size=kernel_size)
+    # show_image(following_next_obs_)
     following_next_obs = draw_segmentation(following_frame, following_masks, following_object_ids, kernel_size=kernel_size)
     following_observations = [following_next_obs]
     show_image(following_next_obs)
@@ -405,9 +417,9 @@ def main():
 
     save_observations(observations, name=f"./transitions/{file_name}_masked_k{kernel_size}_obs_test.mp4")
     save_observations(following_observations, name=f"./transitions/{file_name}_masked_k{kernel_size}_next_obs_test.mp4")
-    file_path = f'/home/ev/serl/examples/async_peg_insert_drq/{file_name}_masked_k{kernel_size}_test.pkl'
-    with open(file_path, "wb") as f:
-        pkl.dump(env.transitions, f)
+    # file_path = f'/home/ev/serl/examples/async_peg_insert_drq/{file_name}_masked_k{kernel_size}_test.pkl'
+    # with open(file_path, "wb") as f:
+    #     pkl.dump(env.transitions, f)
 
 if __name__ == "__main__":
     import os; print(os.getcwd())
